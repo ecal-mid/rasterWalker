@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Raster Dancer — Grid</title>
+    <style type="text/css">
+    html,
+    body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: black;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+
+    .grid {
+
+        --height: 100%;
+        --width: 100%;
+        --cols: 5;
+        --rows: 5;
+
+        display: grid;
+        grid-template-columns: repeat(var(--cols), 1fr);
+        grid-template-rows: repeat(var(--rows), 1fr);
+        height: var(--height);
+        width: var(--width);
+        /*grid-gap: 1px;*/
+    }
+
+    .grid>.cell {
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        position: relative;
+        /*background: white;*/
+    }
+
+    .cell>* {
+        position: absolute;
+        top: 0;
+        left: 0;
+        object-fit: cover;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.5s ease-in-out;
+    }
+
+    .cell>.disableTrans {}
+    </style>
+</head>
+
+<body>
+    <section class="grid">
+    </section>
+    <script type="text/javascript">
+    'use strict';
+    window.addEventListener('load', function() {
+
+        let FILES = [];
+        let CURRFILE = 0;
+        let PATH = './projects/';
+
+        const
+            DIMS = {
+                cols: 1,
+                rows: 1,
+                muted: true
+            },
+
+            DOM = {
+                grid: document.querySelector('.grid'),
+                containers: [],
+            };
+
+        document.body.addEventListener('click', function(e) {
+            // DIMS.muted = false;
+        });
+
+        DOM.grid.addEventListener('transitionend', function(e) {
+            //check if video is appearing
+            if (!e.target.classList.contains('old')) {
+                e.target.classList.add('old');
+            } else {
+                let parent = e.target.parentElement;
+                parent.removeChild(e.target);
+            }
+        });
+
+        DOM.grid.addEventListener('transitionstart', function(e) {
+            //check if video is appearing
+
+            if (!e.target.classList.contains('old')) {
+
+                let sibling = e.target.parentElement.querySelector('.old');
+                //sibling.style.transform
+                if (sibling) {
+
+                    let index = parseInt(e.target.dataset.move);
+
+
+                    sibling.style.transform = randomSide(index).transform;
+                }
+            }
+
+            // let parent = e.target.parentElement;
+            // let oldElement = parent.querySelector('.old');
+
+            // if (oldElement) {
+            //     oldElement.style.transform = randomSide();
+            // }
+
+            // e.target.classList.add('.old');
+
+        });
+
+        async function init() {
+            FILES = await getSubFiles('./dir.txt');
+
+            let results = getSearchParams(window.location.href, ['cols', 'rows']);
+
+            if (!results) {
+                setSearchParams(window.location.href, { cols: DIMS.cols, rows: DIMS.rows });
+            } else {
+                Object.assign(DIMS, results);
+            }
+
+            buildGrid(DOM.grid, DIMS.rows, DIMS.cols);
+            window.addEventListener('resize', function() {
+                resizeGrid(window, DOM.grid, DIMS.rows, DIMS.cols);
+            });
+        }
+
+        function getSearchParams(href, searches) {
+            const url = new URL(href);
+            const params = url.searchParams; // "www.example.com"
+            const results = {};
+            searches.map(s => {
+                let value = params.get(s);
+                if (value !== null)
+                    results[s] = JSON.parse(value);
+            });
+
+            if (Object.keys(results).length === 0)
+                return undefined;
+
+            return results;
+        }
+
+        function setSearchParams(href, params) {
+            const url = new URL(href),
+                searchParams = url.searchParams; // "www.example.com"
+
+            for (let key in params) {
+                searchParams.set(key, params[key]);
+            }
+
+
+            window.location.search = searchParams.toString();
+        }
+
+
+        function resizeGrid(container, grid, rows, cols) {
+
+
+            grid.style.setProperty('--rows', rows);
+            grid.style.setProperty('--cols', cols);
+
+
+            let ratioWindow = container.innerWidth / container.innerHeight,
+                ratioGrid = cols / rows;
+
+            if (ratioWindow > ratioGrid) {
+                grid.style.setProperty('--width', (window.innerHeight * ratioGrid) + 'px');
+                grid.style.setProperty('--height', '100%');
+            } else {
+                grid.style.setProperty('--height', (window.innerWidth / ratioGrid) + 'px');
+                grid.style.setProperty('--width', '100%');
+            }
+        }
+
+        function buildGrid(grid, rows, cols) {
+
+            resizeGrid(window, grid, rows, cols);
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+
+                    let div = document.createElement('div');
+                    div.classList.add('cell');
+                    grid.appendChild(div);
+
+                    nextPlayer(div);
+
+                }
+            }
+        }
+
+        function nextPlayer(div) {
+
+            let path = FILES[CURRFILE];
+            CURRFILE = (CURRFILE + 1) % FILES.length;
+
+            setPlayer(div, path);
+        }
+
+        async function setPlayer(cell, path) {
+
+            let el, loading;
+
+
+
+            if (isVideo(path)) {
+                [el, loading] = loadVideo(path, { muted: DIMS.muted });
+            } else {
+                [el, loading] = loadIframe(path, { muted: DIMS.muted });
+            }
+
+
+            //el.classList.add('disableTrans');
+            let move = randomSide();
+            el.style.transform = move.transform;
+            el.dataset.move = move.index;
+
+            cell.appendChild(el);
+            //el.classList.remove('disableTrans');
+
+            await loading;
+
+            el.style.transform = '';
+        }
+
+
+
+        function isVideo(path) {
+            let ext = ['.mp4', '.mov'];
+
+            for (let i = ext.length; i--;) {
+                if (path.includes(ext[i]))
+                    return ext[i];
+            }
+
+            return false;
+
+        }
+
+        function loadIframe(url, opts) {
+
+        }
+
+        function randomSide(_index) {
+            let sides = ["100%, 0%", "0%, 100%", "-100%, 0%", "0%, -100%"],
+                inverse = ["-100%, 0%", "0%, -100%", "100%, 0%", "0%, 100%"];
+
+            let index = Math.floor(Math.random() * sides.length);
+
+            let move = _index === undefined ? sides[index] : inverse[_index];
+
+            return { transform: `translate(${move})`, index: index };
+        }
+
+        async function loadFile(url, type = 'json') {
+            let response = await fetch(url);
+            return await response[type]();
+        }
+
+        async function getSubFiles(url) {
+
+            let rawData = await loadFile(url, 'text');
+
+            let files = [];
+
+            rawData.split(/\s+/).forEach(file => {
+
+                if (file.split("/").length - 1 >= 2)
+                    files.push(PATH + file.replace('./', ''));
+            });
+
+            return shuffle(files);
+
+        }
+
+        function loadVideo(url, opts) {
+
+            let o = {
+                muted: true,
+                loop: true,
+                autoplay: false,
+                preload: "metadata"
+            }
+
+            Object.assign(o, opts);
+
+            let v = document.createElement('video');
+
+            let promise = new Promise((resolve, reject) => {
+
+                v.oncanplay = function() {
+                    this.play();
+                    resolve(this);
+                }
+
+                v.onerror = function() {
+                    console.error('video rejected!', url, this);
+                    reject(this);
+                }
+
+                v.addEventListener('timeupdate', checkVideoLoop);
+
+                v.src = url;
+                // v.load();
+
+                for (let key in o) {
+                    v[key] = o[key];
+                }
+
+            });
+
+            return [v, promise];
+        }
+
+        function shuffle(a) {
+            var j, x, i;
+            for (i = a.length - 1; i > 0; i--) {
+                j = Math.floor(Math.random() * (i + 1));
+                x = a[i];
+                a[i] = a[j];
+                a[j] = x;
+            }
+            return a;
+        }
+
+
+        function checkVideoLoop() {
+            if (isNaN(this.duration))
+                return;
+
+            let tr = this.played;
+            let hasLoopedOnce = (tr.end(tr.length - 1) == this.duration);
+
+            if (hasLoopedOnce) {
+                this.removeEventListener('timeupdate', checkVideoLoop);
+                nextPlayer(this.parentElement);
+            }
+        }
+
+        init();
+    });
+    </script>
+</body>
+
+</html>
